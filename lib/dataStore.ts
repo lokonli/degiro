@@ -30,5 +30,14 @@ export async function writeInstruments(map: InstrumentMap): Promise<void> {
 /** Stable identity for a transaction row — prefers DEGIRO's order/transaction id. */
 export function transactionKey(t: Pick<Transaction, "orderId" | "date" | "time" | "isin" | "quantity" | "price">): string {
   if (t.orderId) return t.orderId;
+  return transactionCompositeKey(t);
+}
+
+/**
+ * Identity based purely on the trade's attributes, ignoring orderId. CSV imports carry DEGIRO's UUID as
+ * orderId, while the live API sync carries DEGIRO's numeric transaction id instead — the two id formats
+ * never match each other for the same real-world trade, so cross-source dedup must fall back to this.
+ */
+export function transactionCompositeKey(t: Pick<Transaction, "date" | "time" | "isin" | "quantity" | "price">): string {
   return `${t.date}|${t.time}|${t.isin}|${t.quantity}|${t.price}`;
 }

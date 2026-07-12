@@ -1,5 +1,6 @@
 import Link from "next/link";
 import ImportForm from "@/components/ImportForm";
+import DegiroSyncPanel from "@/components/DegiroSyncPanel";
 
 export const metadata = { title: "Import transactions — Portfolio Ledger" };
 
@@ -37,7 +38,16 @@ export default function ImportPage() {
       </header>
 
       <section className="flex flex-col gap-4">
-        <h2 className="text-xs uppercase tracking-[0.08em] text-ink-faint">How to export from DEGIRO</h2>
+        <h2 className="text-xs uppercase tracking-[0.08em] text-ink-faint">Sync directly from DEGIRO</h2>
+        <p className="text-sm text-ink-muted">
+          Pulls new transactions straight from your account via the DEGIRO API. Runs automatically once a day;
+          use the button for an on-demand refresh.
+        </p>
+        <DegiroSyncPanel />
+      </section>
+
+      <section className="flex flex-col gap-4">
+        <h2 className="text-xs uppercase tracking-[0.08em] text-ink-faint">Or import a file manually</h2>
         <ol className="flex flex-col gap-4">
           {STEPS.map((step, i) => (
             <li key={step.title} className="flex gap-4">

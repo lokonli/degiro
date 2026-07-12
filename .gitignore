@@ -32,6 +32,10 @@ yarn-error.log*
 
 # env files (can opt-in for committing if needed)
 .env*
+!.env.example
+
+# operational metadata written by the DEGIRO API sync, not application data
+/data/degiro-sync-meta.json
 
 # vercel
 .vercel
