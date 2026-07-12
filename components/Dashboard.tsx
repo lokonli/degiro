@@ -1,5 +1,6 @@
 "use client";
 
+import { useMemo, useState } from "react";
 import dynamic from "next/dynamic";
 import Link from "next/link";
 import {
@@ -38,6 +39,47 @@ function formatTick(date: string) {
 function formatFull(date: string) {
   const d = new Date(date + "T00:00:00Z");
   return d.toLocaleDateString("en-GB", { day: "numeric", month: "long", year: "numeric", timeZone: "UTC" });
+}
+
+function formatTickShort(date: string) {
+  const d = new Date(date + "T00:00:00Z");
+  return d.toLocaleDateString("en-GB", { day: "numeric", month: "short", timeZone: "UTC" });
+}
+
+const PERFORMANCE_RANGES = [
+  { key: "today", label: "Today" },
+  { key: "week", label: "Last week" },
+  { key: "month", label: "This month" },
+  { key: "year", label: "This year" },
+  { key: "12m", label: "Last 12 months" },
+  { key: "all", label: "All" },
+] as const;
+
+type RangeKey = (typeof PERFORMANCE_RANGES)[number]["key"];
+
+/** Start date (inclusive, YYYY-MM-DD) for a given range, anchored to the last available day. */
+function rangeStartDate(lastDateIso: string, range: RangeKey): string {
+  const last = new Date(lastDateIso + "T00:00:00Z");
+  switch (range) {
+    case "today":
+      return lastDateIso;
+    case "week": {
+      const d = new Date(last);
+      d.setUTCDate(d.getUTCDate() - 6);
+      return d.toISOString().slice(0, 10);
+    }
+    case "month":
+      return new Date(Date.UTC(last.getUTCFullYear(), last.getUTCMonth(), 1)).toISOString().slice(0, 10);
+    case "year":
+      return new Date(Date.UTC(last.getUTCFullYear(), 0, 1)).toISOString().slice(0, 10);
+    case "12m": {
+      const d = new Date(last);
+      d.setUTCDate(d.getUTCDate() - 364);
+      return d.toISOString().slice(0, 10);
+    }
+    case "all":
+      return "0000-00-00";
+  }
 }
 
 function StatTile({
@@ -110,6 +152,24 @@ function PerformanceTooltip({
 
 export default function Dashboard({ series }: { series: PortfolioSeries }) {
   const n = series.dates.length;
+  const [performanceRange, setPerformanceRange] = useState<RangeKey>("all");
+
+  const chartData = useMemo(
+    () =>
+      series.dates.map((date, i) => ({
+        date,
+        value: series.portfolioValue[i],
+        invested: series.netInvested[i],
+        performance: series.performancePct[i],
+      })),
+    [series]
+  );
+
+  const performanceStart = n > 0 ? rangeStartDate(series.dates[n - 1], performanceRange) : "0000-00-00";
+  const performanceData = useMemo(
+    () => chartData.filter((d) => d.date >= performanceStart),
+    [chartData, performanceStart]
+  );
 
   if (n === 0) {
     return (
@@ -131,13 +191,7 @@ export default function Dashboard({ series }: { series: PortfolioSeries }) {
   const totalReturn = currentValue - netInvested;
   const totalReturnPct = series.performancePct[n - 1];
   const gainTone = totalReturn >= 0 ? "gain" : "loss";
-
-  const chartData = series.dates.map((date, i) => ({
-    date,
-    value: series.portfolioValue[i],
-    invested: series.netInvested[i],
-    performance: series.performancePct[i],
-  }));
+  const performanceIsShortRange = performanceRange === "today" || performanceRange === "week" || performanceRange === "month";
 
   const totalAllocated = series.holdings.reduce((s, h) => s + h.valueEUR, 0);
 
@@ -253,11 +307,11 @@ export default function Dashboard({ series }: { series: PortfolioSeries }) {
         <h2 className="font-display text-lg italic text-ink">Performance over time</h2>
         <div className="h-56 rounded-lg border border-border bg-bg-elevated pr-4 pt-4">
           <ResponsiveContainer width="100%" height="100%">
-            <LineChart data={chartData} margin={{ top: 0, right: 8, bottom: 8, left: 8 }}>
+            <LineChart data={performanceData} margin={{ top: 0, right: 8, bottom: 8, left: 8 }}>
               <CartesianGrid vertical={false} stroke="var(--border)" strokeDasharray="3 4" />
               <XAxis
                 dataKey="date"
-                tickFormatter={formatTick}
+                tickFormatter={performanceIsShortRange ? formatTickShort : formatTick}
                 stroke="var(--border-strong)"
                 tick={{ fill: "var(--ink-faint)", fontSize: 11 }}
                 minTickGap={56}
@@ -280,11 +334,31 @@ export default function Dashboard({ series }: { series: PortfolioSeries }) {
                 name="Performance"
                 stroke="var(--accent)"
                 strokeWidth={2}
-                dot={false}
+                dot={
+                  performanceData.length <= 10
+                    ? { r: 3, fill: "var(--accent)", stroke: "var(--bg-elevated)", strokeWidth: 1.5 }
+                    : false
+                }
                 activeDot={{ r: 3.5, fill: "var(--accent)", stroke: "var(--bg-elevated)", strokeWidth: 2 }}
               />
             </LineChart>
           </ResponsiveContainer>
+        </div>
+        <div className="flex flex-wrap gap-1.5">
+          {PERFORMANCE_RANGES.map((r) => (
+            <button
+              key={r.key}
+              type="button"
+              onClick={() => setPerformanceRange(r.key)}
+              className={`rounded-full px-3 py-1.5 text-xs font-medium transition-colors ${
+                performanceRange === r.key
+                  ? "bg-accent text-bg"
+                  : "border border-border text-ink-muted hover:border-border-strong hover:text-ink"
+              }`}
+            >
+              {r.label}
+            </button>
+          ))}
         </div>
       </section>
 
