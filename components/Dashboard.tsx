@@ -82,6 +82,27 @@ function rangeStartDate(lastDateIso: string, range: RangeKey): string {
   }
 }
 
+type ChartPoint = { date: string; value: number; invested: number; performance: number };
+
+/**
+ * Rebases performance to 0% at the window's first day: nets out the window's
+ * starting gain from each day's gain (value - invested), then divides by that
+ * day's current net-invested amount — the same moving base the since-inception
+ * metric uses. A fixed denominator pinned to the window's starting value would
+ * blow up for the "all" range, since this portfolio started tiny (~€1.2k) and
+ * grew to 400x that; dividing by the then-current invested amount avoids it.
+ */
+function rebasePerformance(data: ChartPoint[], windowStart: string): ChartPoint[] {
+  const windowed = data.filter((d) => d.date >= windowStart);
+  if (windowed.length === 0) return windowed;
+  const baseGain = windowed[0].value - windowed[0].invested;
+  return windowed.map((d) => {
+    const incrementalGain = d.value - d.invested - baseGain;
+    const pct = d.invested > 0 ? (incrementalGain / d.invested) * 100 : 0;
+    return { ...d, performance: pct };
+  });
+}
+
 function StatTile({
   label,
   value,
@@ -166,10 +187,7 @@ export default function Dashboard({ series }: { series: PortfolioSeries }) {
   );
 
   const performanceStart = n > 0 ? rangeStartDate(series.dates[n - 1], performanceRange) : "0000-00-00";
-  const performanceData = useMemo(
-    () => chartData.filter((d) => d.date >= performanceStart),
-    [chartData, performanceStart]
-  );
+  const performanceData = useMemo(() => rebasePerformance(chartData, performanceStart), [chartData, performanceStart]);
 
   if (n === 0) {
     return (
