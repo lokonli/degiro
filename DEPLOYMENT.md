@@ -69,6 +69,8 @@ Query params (all optional):
 | `strokeWidth` | `2.5`         | clamped to 0.5–20                            |
 | `fill`        | `true`        | `false` to draw just the line, no gradient area |
 | `padding`     | `12`          | px inset on all sides                        |
+| `axes`        | `true`        | `false` for a bare sparkline, no value/date labels |
+| `axisColor`   | `#888888`     | hex — axis text/gridline color, independent of the line color |
 
 Example for a Home Assistant `picture` card: `https://redacted.example.com/weekvalue?days=7&bg=ffffff`
 
