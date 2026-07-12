@@ -1,6 +1,7 @@
 "use client";
 
 import dynamic from "next/dynamic";
+import Link from "next/link";
 import {
   Area,
   AreaChart,
@@ -109,6 +110,22 @@ function PerformanceTooltip({
 
 export default function Dashboard({ series }: { series: PortfolioSeries }) {
   const n = series.dates.length;
+
+  if (n === 0) {
+    return (
+      <div className="mx-auto flex w-full max-w-5xl flex-col items-start gap-4 px-6 py-10 sm:px-8">
+        <h1 className="font-display text-3xl italic text-ink">Portfolio Ledger</h1>
+        <p className="text-sm text-ink-muted">No transactions yet — import your DEGIRO history to get started.</p>
+        <Link
+          href="/import"
+          className="rounded-full bg-accent px-5 py-2 text-sm font-medium text-bg transition-opacity hover:opacity-90"
+        >
+          Import transactions
+        </Link>
+      </div>
+    );
+  }
+
   const currentValue = series.portfolioValue[n - 1];
   const netInvested = series.netInvested[n - 1];
   const totalReturn = currentValue - netInvested;
@@ -135,10 +152,26 @@ export default function Dashboard({ series }: { series: PortfolioSeries }) {
             DEGIRO transactions · {formatFull(series.dates[0])} — {formatFull(series.dates[n - 1])}
           </p>
         </div>
-        <div className="pt-1">
+        <div className="flex items-center gap-3 pt-1">
+          <Link
+            href="/import"
+            className="flex h-8 items-center rounded-full bg-accent px-3.5 text-xs font-medium text-bg transition-opacity hover:opacity-90"
+          >
+            Import transactions
+          </Link>
           <ThemeToggleSlot />
         </div>
       </header>
+
+      {series.unresolvedIsins.length > 0 && (
+        <div className="-mt-6 rounded-lg border border-loss/30 bg-loss-soft px-4 py-3 text-sm text-ink">
+          {series.unresolvedIsins.length} holding{series.unresolvedIsins.length === 1 ? "" : "s"} (
+          {series.unresolvedIsins.join(", ")}) could not be matched to a price feed and{" "}
+          {series.unresolvedIsins.length === 1 ? "is" : "are"} excluded from the charts below. Add a ticker for{" "}
+          {series.unresolvedIsins.length === 1 ? "it" : "them"} manually in{" "}
+          <code className="rounded bg-bg-inset px-1 py-0.5 text-xs">data/instruments.json</code>.
+        </div>
+      )}
 
       <section className="grid grid-cols-2 gap-3 sm:grid-cols-4">
         <StatTile label="Current value" value={eur.format(currentValue)} />

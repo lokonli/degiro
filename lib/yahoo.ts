@@ -11,12 +11,16 @@ function tsToDateKey(ts: number): string {
   return new Date(ts * 1000).toISOString().slice(0, 10);
 }
 
-export async function fetchDailyCloses(symbol: string, range = "5y"): Promise<PriceSeries> {
+async function fetchChart(symbol: string, range: string) {
   const url = `https://query2.finance.yahoo.com/v8/finance/chart/${encodeURIComponent(symbol)}?range=${range}&interval=1d`;
   const res = await fetch(url, { headers: YAHOO_HEADERS, next: { revalidate: 21600 } });
   if (!res.ok) throw new Error(`Yahoo chart fetch failed for ${symbol}: ${res.status}`);
   const json = await res.json();
-  const result = json?.chart?.result?.[0];
+  return json?.chart?.result?.[0];
+}
+
+export async function fetchDailyCloses(symbol: string, range = "5y"): Promise<PriceSeries> {
+  const result = await fetchChart(symbol, range);
   const series: PriceSeries = new Map();
   if (!result?.timestamp) return series;
 
@@ -31,4 +35,25 @@ export async function fetchDailyCloses(symbol: string, range = "5y"): Promise<Pr
     series.set(tsToDateKey(timestamps[i]), close);
   }
   return series;
+}
+
+/** Confirms a symbol has real chartable history and reports its quote currency. */
+export async function probeSymbol(symbol: string): Promise<{ currency: string } | null> {
+  try {
+    const result = await fetchChart(symbol, "1mo");
+    if (!result?.timestamp?.length) return null;
+    return { currency: result.meta?.currency ?? "EUR" };
+  } catch {
+    return null;
+  }
+}
+
+export type YahooQuote = { symbol: string; exchDisp?: string; typeDisp?: string; longname?: string; shortname?: string };
+
+export async function searchYahoo(query: string): Promise<YahooQuote[]> {
+  const url = `https://query2.finance.yahoo.com/v1/finance/search?q=${encodeURIComponent(query)}`;
+  const res = await fetch(url, { headers: YAHOO_HEADERS });
+  if (!res.ok) throw new Error(`Yahoo search failed for ${query}: ${res.status}`);
+  const json = await res.json();
+  return (json?.quotes ?? []) as YahooQuote[];
 }

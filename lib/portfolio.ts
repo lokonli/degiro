@@ -1,25 +1,7 @@
-import transactions from "@/data/transactions.json";
-import instruments from "@/data/instruments.json";
+import { readTransactions, readInstruments } from "@/lib/dataStore";
 import { fetchDailyCloses, type PriceSeries } from "@/lib/yahoo";
 
-export type Transaction = {
-  date: string;
-  time: string;
-  product: string;
-  isin: string;
-  quantity: number;
-  price: number;
-  localCurrency: string;
-  localValue: number;
-  valueEUR: number;
-  fees: number;
-  totalEUR: number;
-};
-
-export type Instrument = { name: string; ticker: string; currency: "EUR" | "USD" };
-
-const txns = transactions as Transaction[];
-const instrumentMap = instruments as Record<string, Instrument>;
+export type { Transaction, Instrument } from "@/lib/types";
 
 function dateRange(start: string, end: string): string[] {
   const dates: string[] = [];
@@ -58,16 +40,36 @@ export type PortfolioSeries = {
   holdings: HoldingPoint[]; // latest snapshot
   totalFeesEUR: number;
   asOf: string;
+  unresolvedIsins: string[]; // holdings excluded from valuation — no ticker mapping yet
 };
 
 export async function computePortfolioSeries(): Promise<PortfolioSeries> {
-  const isins = Array.from(new Set(txns.map((t) => t.isin)));
-  const tickers = isins.map((isin) => instrumentMap[isin].ticker);
-  const needsFx = isins.some((isin) => instrumentMap[isin].currency === "USD");
+  const [txns, instrumentMap] = await Promise.all([readTransactions(), readInstruments()]);
+  if (txns.length === 0) {
+    return {
+      dates: [],
+      portfolioValue: [],
+      netInvested: [],
+      performancePct: [],
+      holdings: [],
+      totalFeesEUR: 0,
+      asOf: new Date().toISOString().slice(0, 10),
+      unresolvedIsins: [],
+    };
+  }
 
-  const [priceSeriesList, fxSeries] = await Promise.all([
+  const allIsins = Array.from(new Set(txns.map((t) => t.isin)));
+  const isins = allIsins.filter((isin) => instrumentMap[isin]);
+  const unresolvedIsins = allIsins.filter((isin) => !instrumentMap[isin]);
+  const tickers = isins.map((isin) => instrumentMap[isin].ticker);
+
+  const foreignCurrencies = Array.from(
+    new Set(isins.map((isin) => instrumentMap[isin].currency).filter((c) => c !== "EUR"))
+  );
+
+  const [priceSeriesList, fxSeriesList] = await Promise.all([
     Promise.all(tickers.map((t) => fetchDailyCloses(t))),
-    needsFx ? fetchDailyCloses("EURUSD=X") : Promise.resolve(new Map<string, number>()),
+    Promise.all(foreignCurrencies.map((c) => fetchDailyCloses(`EUR${c}=X`))),
   ]);
 
   const pricesByIsin = new Map<string, PriceSeries>();
@@ -77,16 +79,29 @@ export async function computePortfolioSeries(): Promise<PortfolioSeries> {
   const today = new Date().toISOString().slice(0, 10);
   const dates = dateRange(firstTxnDate, today);
 
-  const fxByDate = fxSeries.size > 0 ? forwardFill(dates, fxSeries) : dates.map(() => 1);
+  // units of foreign currency per 1 EUR, forward-filled per calendar day
+  const fxByCurrency = new Map<string, number[]>();
+  foreignCurrencies.forEach((c, i) => {
+    const series = fxSeriesList[i];
+    fxByCurrency.set(c, series.size > 0 ? forwardFill(dates, series) : dates.map(() => 1));
+  });
 
   const filledPricesByIsin = new Map<string, number[]>();
   for (const isin of isins) {
     filledPricesByIsin.set(isin, forwardFill(dates, pricesByIsin.get(isin)!));
   }
 
+  function priceInEurAt(isin: string, dayIdx: number): number {
+    const instrument = instrumentMap[isin];
+    const raw = filledPricesByIsin.get(isin)![dayIdx] * (instrument.priceScale ?? 1);
+    if (instrument.currency === "EUR") return raw;
+    const fxRate = fxByCurrency.get(instrument.currency)?.[dayIdx] ?? 1;
+    return raw / fxRate;
+  }
+
   const portfolioValue: number[] = new Array(dates.length).fill(0);
   const netInvested: number[] = new Array(dates.length).fill(0);
-  const unitsByIsin = new Map<string, number>(isins.map((i) => [i, 0]));
+  const unitsByIsin = new Map<string, number>(allIsins.map((i) => [i, 0]));
   let cumNetCash = 0;
   let totalFeesEUR = 0;
 
@@ -106,10 +121,7 @@ export async function computePortfolioSeries(): Promise<PortfolioSeries> {
     for (const isin of isins) {
       const units = unitsByIsin.get(isin) ?? 0;
       if (units === 0) continue;
-      const currency = instrumentMap[isin].currency;
-      const priceLocal = filledPricesByIsin.get(isin)![d];
-      const priceEUR = currency === "USD" ? priceLocal / fxByDate[d] : priceLocal;
-      value += units * priceEUR;
+      value += units * priceInEurAt(isin, d);
     }
     portfolioValue[d] = value;
   }
@@ -122,10 +134,7 @@ export async function computePortfolioSeries(): Promise<PortfolioSeries> {
   const holdings: HoldingPoint[] = isins
     .map((isin) => {
       const units = unitsByIsin.get(isin) ?? 0;
-      const currency = instrumentMap[isin].currency;
-      const priceLocal = filledPricesByIsin.get(isin)![lastDay];
-      const priceEUR = currency === "USD" ? priceLocal / fxByDate[lastDay] : priceLocal;
-      return { isin, name: instrumentMap[isin].name, units, valueEUR: units * priceEUR };
+      return { isin, name: instrumentMap[isin].name, units, valueEUR: units * priceInEurAt(isin, lastDay) };
     })
     .filter((h) => Math.abs(h.units) > 1e-9)
     .sort((a, b) => b.valueEUR - a.valueEUR);
@@ -138,5 +147,6 @@ export async function computePortfolioSeries(): Promise<PortfolioSeries> {
     holdings,
     totalFeesEUR,
     asOf: today,
+    unresolvedIsins,
   };
 }
