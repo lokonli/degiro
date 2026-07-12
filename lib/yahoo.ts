@@ -13,7 +13,7 @@ function tsToDateKey(ts: number): string {
 
 async function fetchChart(symbol: string, range: string) {
   const url = `https://query2.finance.yahoo.com/v8/finance/chart/${encodeURIComponent(symbol)}?range=${range}&interval=1d`;
-  const res = await fetch(url, { headers: YAHOO_HEADERS, next: { revalidate: 21600 } });
+  const res = await fetch(url, { headers: YAHOO_HEADERS, next: { revalidate: 10800 } });
   if (!res.ok) throw new Error(`Yahoo chart fetch failed for ${symbol}: ${res.status}`);
   const json = await res.json();
   return json?.chart?.result?.[0];

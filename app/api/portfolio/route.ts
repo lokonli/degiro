@@ -1,7 +1,7 @@
 import { NextResponse } from "next/server";
 import { computePortfolioSeries } from "@/lib/portfolio";
 
-export const revalidate = 21600; // 6h — daily EOD data doesn't need to be fetched more often
+export const revalidate = 10800; // 3h — daily EOD data doesn't need to be fetched more often
 
 export async function GET() {
   try {
