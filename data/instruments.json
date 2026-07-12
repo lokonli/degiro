@@ -1,0 +1,52 @@
+{
+  "IE00BK5BQT80": {
+    "name": "Vanguard FTSE All-World UCITS ETF (USD) Acc",
+    "ticker": "VWRA.L",
+    "currency": "USD"
+  },
+  "IE0006WW1TQ4": {
+    "name": "Xtrackers MSCI World ex USA UCITS ETF",
+    "ticker": "EXUS.DE",
+    "currency": "EUR"
+  },
+  "IE00B3YLTY66": {
+    "name": "SPDR MSCI ACWI IMI UCITS ETF Acc",
+    "ticker": "SPYI.DE",
+    "currency": "EUR"
+  },
+  "LU1829219390": {
+    "name": "Amundi Euro Stoxx Banks UCITS ETF Acc",
+    "ticker": "BNKE.PA",
+    "currency": "EUR"
+  },
+  "IE000OJ5TQP4": {
+    "name": "Future of Defence UCITS ETF Acc",
+    "ticker": "ASWC.DE",
+    "currency": "EUR"
+  },
+  "IE00BK5BQX27": {
+    "name": "Vanguard FTSE Developed Europe UCITS ETF (EUR) Acc",
+    "ticker": "VWCG.DE",
+    "currency": "EUR"
+  },
+  "NL0010408704": {
+    "name": "VanEck World Equal Weight Screened UCITS ETF",
+    "ticker": "TSWE.AS",
+    "currency": "EUR"
+  },
+  "IE00BYYHSM20": {
+    "name": "iShares Europe Quality Dividend UCITS ETF Dist",
+    "ticker": "QDVX.DE",
+    "currency": "EUR"
+  },
+  "IE00BYVJRR92": {
+    "name": "iShares MSCI USA SRI UCITS ETF (USD) Acc",
+    "ticker": "SUAS.L",
+    "currency": "USD"
+  },
+  "IE00B53SZB19": {
+    "name": "iShares NASDAQ 100 UCITS ETF (USD) Acc",
+    "ticker": "CSNDX.SW",
+    "currency": "USD"
+  }
+}
