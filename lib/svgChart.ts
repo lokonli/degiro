@@ -39,15 +39,17 @@ function pickYTicks(min: number, max: number): number[] {
   return ticks;
 }
 
+const AXIS_FONT_SIZE = 22;
+
 /** Renders a single-series line chart (with an implicit zero baseline) as a standalone SVG string. */
 export function renderSvgLineChart(series: SvgSeriesPoint[], opts: SvgLineChartOptions): string {
   const { width, height, padding, color, background, strokeWidth, fill, axes, axisColor } = opts;
   const values = series.map((p) => p.value);
   const n = values.length;
 
-  const leftInset = padding + (axes ? 40 : 0);
-  const bottomInset = padding + (axes ? 16 : 0);
-  const topInset = padding + (axes ? 6 : 0);
+  const leftInset = padding + (axes ? 82 : 0);
+  const bottomInset = padding + (axes ? 28 : 0);
+  const topInset = padding + (axes ? 12 : 0);
   const rightInset = padding;
 
   const innerW = Math.max(1, width - leftInset - rightInset);
@@ -86,7 +88,7 @@ export function renderSvgLineChart(series: SvgSeriesPoint[], opts: SvgLineChartO
         const y = yAt(v).toFixed(2);
         const isZero = v === 0;
         return `<line x1="${leftInset}" y1="${y}" x2="${width - rightInset}" y2="${y}" stroke="${axisColor}" stroke-opacity="${isZero ? 0.35 : 0.15}" stroke-width="1" stroke-dasharray="${isZero ? "none" : "3 3"}" />
-        <text x="${leftInset - 6}" y="${y}" dy="0.32em" text-anchor="end" font-size="11" font-family="system-ui, sans-serif" fill="${axisColor}">${formatCompactEur(v)}</text>`;
+        <text x="${leftInset - 10}" y="${y}" dy="0.32em" text-anchor="end" font-size="${AXIS_FONT_SIZE}" font-family="system-ui, sans-serif" fill="${axisColor}">${formatCompactEur(v)}</text>`;
       })
       .join("\n");
 
@@ -100,7 +102,7 @@ export function renderSvgLineChart(series: SvgSeriesPoint[], opts: SvgLineChartO
       .map((i) => {
         const x = xAt(i);
         const anchor = i === 0 ? "start" : i === n - 1 ? "end" : "middle";
-        return `<text x="${x.toFixed(2)}" y="${height - bottomInset + 14}" text-anchor="${anchor}" font-size="11" font-family="system-ui, sans-serif" fill="${axisColor}">${formatShortDate(series[i].date)}</text>`;
+        return `<text x="${x.toFixed(2)}" y="${height - bottomInset + 24}" text-anchor="${anchor}" font-size="${AXIS_FONT_SIZE}" font-family="system-ui, sans-serif" fill="${axisColor}">${formatShortDate(series[i].date)}</text>`;
       })
       .join("\n");
 
