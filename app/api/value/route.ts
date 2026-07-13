@@ -13,9 +13,11 @@ export async function GET() {
       return NextResponse.json({ error: "No portfolio data yet" }, { status: 404 });
     }
 
-    // portfolioValue[lastIdx] is priced off the last completed EOD close; todayChangeEUR is the live
-    // move since that close (lib/portfolio.ts), so summing the two approximates the current live value.
-    const valueEUR = series.portfolioValue[lastIdx] + series.todayChangeEUR;
+    // portfolioValue[lastIdx] is already live-priced during market hours — Yahoo's daily-close series
+    // (lib/yahoo.ts fetchDailyCloses) returns an in-progress bar for "today", not yesterday's finalized
+    // close. todayChangeEUR is a *separate* live-vs-previousClose delta, so adding it here would double-count
+    // today's move on top of a baseline that already reflects it.
+    const valueEUR = series.portfolioValue[lastIdx];
 
     const weekAgoIdx = Math.max(0, lastIdx - 7);
     const weekAgoValueEUR = series.portfolioValue[weekAgoIdx];
