@@ -1,5 +1,5 @@
 import { readTransactions, readInstruments, readDividends } from "@/lib/dataStore";
-import { fetchDailyCloses, type PriceSeries } from "@/lib/yahoo";
+import { fetchDailyCloses, fetchLiveQuote, type PriceSeries, type LiveQuote } from "@/lib/yahoo";
 
 export type { Transaction, Instrument } from "@/lib/types";
 
@@ -30,7 +30,15 @@ function forwardFill(dates: string[], series: PriceSeries): number[] {
   return out;
 }
 
-export type HoldingPoint = { isin: string; name: string; units: number; valueEUR: number; dividendsEUR: number };
+export type HoldingPoint = {
+  isin: string;
+  name: string;
+  units: number;
+  valueEUR: number;
+  dividendsEUR: number;
+  todayChangeEUR: number;
+  todayChangePct: number;
+};
 
 export type PortfolioSeries = {
   dates: string[];
@@ -41,6 +49,8 @@ export type PortfolioSeries = {
   performancePctInclDividends: number[];
   totalDividendsEUR: number;
   dividendsYTDEUR: number;
+  todayChangeEUR: number;
+  todayChangePct: number;
   holdings: HoldingPoint[]; // latest snapshot
   totalFeesEUR: number;
   asOf: string;
@@ -63,6 +73,8 @@ export async function computePortfolioSeries(): Promise<PortfolioSeries> {
       performancePctInclDividends: [],
       totalDividendsEUR: 0,
       dividendsYTDEUR: 0,
+      todayChangeEUR: 0,
+      todayChangePct: 0,
       holdings: [],
       totalFeesEUR: 0,
       asOf: new Date().toISOString().slice(0, 10),
@@ -168,16 +180,70 @@ export async function computePortfolioSeries(): Promise<PortfolioSeries> {
     .filter((d) => d.date >= currentYearStart)
     .reduce((s, d) => s + d.netEUR, 0);
 
+  // "Today's change" uses live quotes, fetched only for currently-held positions — separate from the
+  // EOD daily-close series above (which drives valueEUR) since intraday prices aren't part of that history.
+  const heldIsins = isins.filter((isin) => Math.abs(unitsByIsin.get(isin) ?? 0) > 1e-9);
+  const heldForeignCurrencies = Array.from(
+    new Set(heldIsins.map((isin) => instrumentMap[isin].currency).filter((c) => c !== "EUR"))
+  );
+
+  const [liveQuoteList, liveFxList] = await Promise.all([
+    Promise.all(heldIsins.map((isin) => fetchLiveQuote(instrumentMap[isin].ticker))),
+    Promise.all(heldForeignCurrencies.map((c) => fetchLiveQuote(`EUR${c}=X`))),
+  ]);
+
+  const liveQuoteByIsin = new Map<string, LiveQuote>();
+  heldIsins.forEach((isin, i) => {
+    const quote = liveQuoteList[i];
+    if (quote) liveQuoteByIsin.set(isin, quote);
+  });
+  const liveFxByCurrency = new Map<string, LiveQuote>();
+  heldForeignCurrencies.forEach((c, i) => {
+    const quote = liveFxList[i];
+    if (quote) liveFxByCurrency.set(c, quote);
+  });
+
+  function liveEurPrice(isin: string, rawPrice: number, fxField: "price" | "previousClose"): number | null {
+    const instrument = instrumentMap[isin];
+    const scaled = rawPrice * (instrument.priceScale ?? 1);
+    if (instrument.currency === "EUR") return scaled;
+    const fxQuote = liveFxByCurrency.get(instrument.currency);
+    if (!fxQuote) return null;
+    return scaled / fxQuote[fxField];
+  }
+
+  const todayChangeByIsin = new Map<string, { changeEUR: number; changePct: number; previousValueEUR: number }>();
+  for (const isin of heldIsins) {
+    const quote = liveQuoteByIsin.get(isin);
+    if (!quote) continue;
+    const currentEUR = liveEurPrice(isin, quote.price, "price");
+    const previousEUR = liveEurPrice(isin, quote.previousClose, "previousClose");
+    if (currentEUR == null || previousEUR == null || previousEUR === 0) continue;
+    const units = unitsByIsin.get(isin) ?? 0;
+    todayChangeByIsin.set(isin, {
+      changeEUR: units * (currentEUR - previousEUR),
+      changePct: ((currentEUR - previousEUR) / previousEUR) * 100,
+      previousValueEUR: units * previousEUR,
+    });
+  }
+
+  const todayChangeEUR = Array.from(todayChangeByIsin.values()).reduce((s, c) => s + c.changeEUR, 0);
+  const todayPreviousValueEUR = Array.from(todayChangeByIsin.values()).reduce((s, c) => s + c.previousValueEUR, 0);
+  const todayChangePct = todayPreviousValueEUR > 0 ? (todayChangeEUR / todayPreviousValueEUR) * 100 : 0;
+
   const lastDay = dates.length - 1;
   const holdings: HoldingPoint[] = isins
     .map((isin) => {
       const units = unitsByIsin.get(isin) ?? 0;
+      const change = todayChangeByIsin.get(isin);
       return {
         isin,
         name: instrumentMap[isin].name,
         units,
         valueEUR: units * priceInEurAt(isin, lastDay),
         dividendsEUR: dividendsByIsin.get(isin) ?? 0,
+        todayChangeEUR: change?.changeEUR ?? 0,
+        todayChangePct: change?.changePct ?? 0,
       };
     })
     .filter((h) => Math.abs(h.units) > 1e-9)
@@ -192,6 +258,8 @@ export async function computePortfolioSeries(): Promise<PortfolioSeries> {
     performancePctInclDividends,
     totalDividendsEUR,
     dividendsYTDEUR,
+    todayChangeEUR,
+    todayChangePct,
     holdings,
     totalFeesEUR,
     asOf: today,

@@ -214,6 +214,8 @@ export default function Dashboard({ series }: { series: PortfolioSeries }) {
   const totalReturnInclDividends = currentValue - netInvestedInclDividends;
   const totalReturnInclDividendsPct = series.performancePctInclDividends[n - 1];
   const gainToneInclDividends = totalReturnInclDividends >= 0 ? "gain" : "loss";
+
+  const todayChangeTone = series.todayChangeEUR >= 0 ? "gain" : "loss";
   const performanceIsShortRange = performanceRange === "today" || performanceRange === "week" || performanceRange === "month";
 
   const totalAllocated = series.holdings.reduce((s, h) => s + h.valueEUR, 0);
@@ -256,8 +258,14 @@ export default function Dashboard({ series }: { series: PortfolioSeries }) {
         </div>
       )}
 
-      <section className="grid grid-cols-2 gap-3 sm:grid-cols-3 lg:grid-cols-6">
+      <section className="grid grid-cols-2 gap-3 sm:grid-cols-3 lg:grid-cols-4">
         <StatTile label="Current value" value={eur.format(currentValue)} />
+        <StatTile
+          label="Today's change"
+          value={`${series.todayChangeEUR >= 0 ? "+" : ""}${eur.format(series.todayChangeEUR)}`}
+          sub={pct(series.todayChangePct)}
+          tone={todayChangeTone}
+        />
         <StatTile label="Net invested" value={eur.format(netInvested)} />
         <StatTile
           label="Total return"
@@ -405,12 +413,13 @@ export default function Dashboard({ series }: { series: PortfolioSeries }) {
       <section className="flex flex-col gap-3 pb-6">
         <h2 className="font-display text-lg italic text-ink">Current holdings</h2>
         <div className="overflow-x-auto rounded-lg border border-border bg-bg-elevated">
-          <table className="w-full min-w-[660px] border-collapse text-sm">
+          <table className="w-full min-w-[780px] border-collapse text-sm">
             <thead>
               <tr className="border-b border-border text-left text-[11px] uppercase tracking-[0.08em] text-ink-faint">
                 <th className="px-4 py-3 font-normal">Holding</th>
                 <th className="px-4 py-3 text-right font-normal">Units</th>
                 <th className="px-4 py-3 text-right font-normal">Value</th>
+                <th className="px-4 py-3 text-right font-normal">Today</th>
                 <th className="px-4 py-3 text-right font-normal">Dividends</th>
                 <th className="px-4 py-3 text-right font-normal">Allocation</th>
               </tr>
@@ -418,6 +427,7 @@ export default function Dashboard({ series }: { series: PortfolioSeries }) {
             <tbody>
               {series.holdings.map((h) => {
                 const alloc = totalAllocated > 0 ? (h.valueEUR / totalAllocated) * 100 : 0;
+                const holdingTodayTone = h.todayChangeEUR >= 0 ? "text-gain" : "text-loss";
                 return (
                   <tr key={h.isin} className="border-b border-border last:border-0">
                     <td className="px-4 py-3 text-ink">{h.name}</td>
@@ -426,6 +436,17 @@ export default function Dashboard({ series }: { series: PortfolioSeries }) {
                     </td>
                     <td className="px-4 py-3 text-right font-mono tabular text-ink">
                       {eurPrecise.format(h.valueEUR)}
+                    </td>
+                    <td className={`px-4 py-3 text-right font-mono tabular ${holdingTodayTone}`}>
+                      {h.todayChangeEUR !== 0 ? (
+                        <>
+                          {h.todayChangeEUR >= 0 ? "+" : ""}
+                          {eurPrecise.format(h.todayChangeEUR)}
+                          <span className="ml-1.5 text-xs">({pct(h.todayChangePct, 2)})</span>
+                        </>
+                      ) : (
+                        "—"
+                      )}
                     </td>
                     <td className="px-4 py-3 text-right font-mono tabular text-ink-muted">
                       {h.dividendsEUR > 0 ? eurPrecise.format(h.dividendsEUR) : "—"}

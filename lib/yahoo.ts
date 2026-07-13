@@ -37,6 +37,21 @@ export async function fetchDailyCloses(symbol: string, range = "5y"): Promise<Pr
   return series;
 }
 
+export type LiveQuote = { price: number; previousClose: number };
+
+/**
+ * Current price vs. the prior trading day's close, for "today's change" figures. Pulled from a small
+ * range so `chartPreviousClose` reflects yesterday's actual close — at wide ranges (e.g. the 5y range
+ * `fetchDailyCloses` uses) Yahoo returns the close from the *start* of that range instead.
+ */
+export async function fetchLiveQuote(symbol: string): Promise<LiveQuote | null> {
+  const result = await fetchChart(symbol, "5d");
+  const price = result?.meta?.regularMarketPrice;
+  const previousClose = result?.meta?.chartPreviousClose ?? result?.meta?.previousClose;
+  if (price == null || previousClose == null) return null;
+  return { price, previousClose };
+}
+
 /** Confirms a symbol has real chartable history and reports its quote currency. */
 export async function probeSymbol(symbol: string): Promise<{ currency: string } | null> {
   try {
