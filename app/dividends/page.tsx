@@ -1,5 +1,6 @@
 import Link from "next/link";
 import { readDividends } from "@/lib/dataStore";
+import DividendChart from "@/components/DividendChart";
 
 export const metadata = { title: "Dividends — Portfolio Ledger" };
 export const revalidate = 10800;
@@ -14,10 +15,17 @@ function formatDate(date: string) {
 export default async function DividendsPage() {
   const dividends = await readDividends();
   const sorted = [...dividends].sort((a, b) => b.date.localeCompare(a.date));
+  const ascending = [...dividends].sort((a, b) => a.date.localeCompare(b.date));
 
   const totalGross = dividends.reduce((s, d) => s + d.grossEUR, 0);
   const totalTax = dividends.reduce((s, d) => s + d.taxEUR, 0);
   const totalNet = dividends.reduce((s, d) => s + d.netEUR, 0);
+
+  const cumulativePoints = ascending.reduce<{ date: string; cumulative: number }[]>((acc, d) => {
+    const prev = acc.length > 0 ? acc[acc.length - 1].cumulative : 0;
+    acc.push({ date: d.date, cumulative: prev + d.netEUR });
+    return acc;
+  }, []);
 
   return (
     <div className="mx-auto flex w-full max-w-2xl flex-col gap-8 px-6 py-10 sm:px-8">
@@ -56,6 +64,11 @@ export default async function DividendsPage() {
               <div className="text-[11px] uppercase tracking-[0.08em] text-ink-faint">Net received</div>
               <div className="mt-1.5 font-mono text-xl tabular text-ink">{eur.format(totalNet)}</div>
             </div>
+          </section>
+
+          <section className="flex flex-col gap-3">
+            <h2 className="font-display text-lg italic text-ink">Cumulative dividends received</h2>
+            <DividendChart points={cumulativePoints} />
           </section>
 
           <section className="overflow-x-auto rounded-lg border border-border bg-bg-elevated">

@@ -30,7 +30,7 @@ function forwardFill(dates: string[], series: PriceSeries): number[] {
   return out;
 }
 
-export type HoldingPoint = { isin: string; name: string; units: number; valueEUR: number };
+export type HoldingPoint = { isin: string; name: string; units: number; valueEUR: number; dividendsEUR: number };
 
 export type PortfolioSeries = {
   dates: string[];
@@ -40,6 +40,7 @@ export type PortfolioSeries = {
   netInvestedInclDividends: number[];
   performancePctInclDividends: number[];
   totalDividendsEUR: number;
+  dividendsYTDEUR: number;
   holdings: HoldingPoint[]; // latest snapshot
   totalFeesEUR: number;
   asOf: string;
@@ -61,6 +62,7 @@ export async function computePortfolioSeries(): Promise<PortfolioSeries> {
       netInvestedInclDividends: [],
       performancePctInclDividends: [],
       totalDividendsEUR: 0,
+      dividendsYTDEUR: 0,
       holdings: [],
       totalFeesEUR: 0,
       asOf: new Date().toISOString().slice(0, 10),
@@ -157,11 +159,26 @@ export async function computePortfolioSeries(): Promise<PortfolioSeries> {
     netInvestedInclDividends[i] > 0 ? ((v - netInvestedInclDividends[i]) / netInvestedInclDividends[i]) * 100 : 0
   );
 
+  const dividendsByIsin = new Map<string, number>();
+  for (const div of dividends) {
+    dividendsByIsin.set(div.isin, (dividendsByIsin.get(div.isin) ?? 0) + div.netEUR);
+  }
+  const currentYearStart = `${today.slice(0, 4)}-01-01`;
+  const dividendsYTDEUR = dividends
+    .filter((d) => d.date >= currentYearStart)
+    .reduce((s, d) => s + d.netEUR, 0);
+
   const lastDay = dates.length - 1;
   const holdings: HoldingPoint[] = isins
     .map((isin) => {
       const units = unitsByIsin.get(isin) ?? 0;
-      return { isin, name: instrumentMap[isin].name, units, valueEUR: units * priceInEurAt(isin, lastDay) };
+      return {
+        isin,
+        name: instrumentMap[isin].name,
+        units,
+        valueEUR: units * priceInEurAt(isin, lastDay),
+        dividendsEUR: dividendsByIsin.get(isin) ?? 0,
+      };
     })
     .filter((h) => Math.abs(h.units) > 1e-9)
     .sort((a, b) => b.valueEUR - a.valueEUR);
@@ -174,6 +191,7 @@ export async function computePortfolioSeries(): Promise<PortfolioSeries> {
     netInvestedInclDividends,
     performancePctInclDividends,
     totalDividendsEUR,
+    dividendsYTDEUR,
     holdings,
     totalFeesEUR,
     asOf: today,

@@ -256,7 +256,7 @@ export default function Dashboard({ series }: { series: PortfolioSeries }) {
         </div>
       )}
 
-      <section className="grid grid-cols-2 gap-3 sm:grid-cols-3 lg:grid-cols-5">
+      <section className="grid grid-cols-2 gap-3 sm:grid-cols-3 lg:grid-cols-6">
         <StatTile label="Current value" value={eur.format(currentValue)} />
         <StatTile label="Net invested" value={eur.format(netInvested)} />
         <StatTile
@@ -270,6 +270,11 @@ export default function Dashboard({ series }: { series: PortfolioSeries }) {
           value={`${totalReturnInclDividends >= 0 ? "+" : ""}${eur.format(totalReturnInclDividends)}`}
           sub={pct(totalReturnInclDividendsPct)}
           tone={gainToneInclDividends}
+        />
+        <StatTile
+          label="Dividends received"
+          value={eur.format(series.totalDividendsEUR)}
+          sub={`${eur.format(series.dividendsYTDEUR)} this year`}
         />
         <StatTile label="Fees paid" value={eur.format(Math.abs(series.totalFeesEUR))} />
       </section>
@@ -400,12 +405,13 @@ export default function Dashboard({ series }: { series: PortfolioSeries }) {
       <section className="flex flex-col gap-3 pb-6">
         <h2 className="font-display text-lg italic text-ink">Current holdings</h2>
         <div className="overflow-x-auto rounded-lg border border-border bg-bg-elevated">
-          <table className="w-full min-w-[560px] border-collapse text-sm">
+          <table className="w-full min-w-[660px] border-collapse text-sm">
             <thead>
               <tr className="border-b border-border text-left text-[11px] uppercase tracking-[0.08em] text-ink-faint">
                 <th className="px-4 py-3 font-normal">Holding</th>
                 <th className="px-4 py-3 text-right font-normal">Units</th>
                 <th className="px-4 py-3 text-right font-normal">Value</th>
+                <th className="px-4 py-3 text-right font-normal">Dividends</th>
                 <th className="px-4 py-3 text-right font-normal">Allocation</th>
               </tr>
             </thead>
@@ -420,6 +426,9 @@ export default function Dashboard({ series }: { series: PortfolioSeries }) {
                     </td>
                     <td className="px-4 py-3 text-right font-mono tabular text-ink">
                       {eurPrecise.format(h.valueEUR)}
+                    </td>
+                    <td className="px-4 py-3 text-right font-mono tabular text-ink-muted">
+                      {h.dividendsEUR > 0 ? eurPrecise.format(h.dividendsEUR) : "—"}
                     </td>
                     <td className="px-4 py-3">
                       <div className="flex items-center justify-end gap-2">
