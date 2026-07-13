@@ -1,7 +1,9 @@
 import { NextResponse } from "next/server";
 import { computePortfolioSeries } from "@/lib/portfolio";
 
-export const revalidate = 10800; // 3h — daily EOD data doesn't need to be fetched more often
+// 15m — bounded by the live-quote fetch's own revalidate window (lib/yahoo.ts), which the "today's
+// change" figures need; the EOD history fetches are still cached independently at their own 3h window.
+export const revalidate = 900;
 
 export async function GET() {
   try {

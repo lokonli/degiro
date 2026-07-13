@@ -1,5 +1,8 @@
 const YAHOO_HEADERS = { "User-Agent": "Mozilla/5.0 (compatible; PortfolioDashboard/1.0)" };
 
+const DAILY_CLOSE_REVALIDATE_SECONDS = 10800; // 3h — EOD data doesn't change more often than once a day
+const LIVE_QUOTE_REVALIDATE_SECONDS = 900; // 15m — for "today's change", which should track the market more closely
+
 export type PriceSeries = Map<string, number>; // date (YYYY-MM-DD) -> close price
 
 /**
@@ -11,9 +14,9 @@ function tsToDateKey(ts: number): string {
   return new Date(ts * 1000).toISOString().slice(0, 10);
 }
 
-async function fetchChart(symbol: string, range: string) {
+async function fetchChart(symbol: string, range: string, revalidateSeconds = DAILY_CLOSE_REVALIDATE_SECONDS) {
   const url = `https://query2.finance.yahoo.com/v8/finance/chart/${encodeURIComponent(symbol)}?range=${range}&interval=1d`;
-  const res = await fetch(url, { headers: YAHOO_HEADERS, next: { revalidate: 10800 } });
+  const res = await fetch(url, { headers: YAHOO_HEADERS, next: { revalidate: revalidateSeconds } });
   if (!res.ok) throw new Error(`Yahoo chart fetch failed for ${symbol}: ${res.status}`);
   const json = await res.json();
   return json?.chart?.result?.[0];
@@ -45,7 +48,7 @@ export type LiveQuote = { price: number; previousClose: number };
  * `fetchDailyCloses` uses) Yahoo returns the close from the *start* of that range instead.
  */
 export async function fetchLiveQuote(symbol: string): Promise<LiveQuote | null> {
-  const result = await fetchChart(symbol, "5d");
+  const result = await fetchChart(symbol, "5d", LIVE_QUOTE_REVALIDATE_SECONDS);
   const price = result?.meta?.regularMarketPrice;
   const previousClose = result?.meta?.chartPreviousClose ?? result?.meta?.previousClose;
   if (price == null || previousClose == null) return null;
