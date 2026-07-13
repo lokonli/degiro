@@ -50,6 +50,7 @@ pm2 restart degiro-tunnel       # rarely needed — only if the tunnel drops and
 - Configured via the Cloudflare API using a token found in `/home/redacted/dev/reqse/.env` (`CF_API_TOKEN` / `CF_ACCOUNT_ID`) — that token belongs to the `reqse` project, not this one. No Cloudflare credentials are stored in this repo.
 - To change who can access it or add a second person, edit the policy at [one.dash.cloudflare.com](https://one.dash.cloudflare.com) → Access → Applications → `degiro`, or via the API (`PUT /accounts/{account_id}/access/apps/REDACTED_APP_ID/policies/{policy_id}`).
 - `/weekvalue` is deliberately **not** gated — it's a separate, path-scoped Access application (`degiro weekvalue (public, no auth)`, id `REDACTED_APP_ID_WEEKVALUE`, domain `redacted.example.com/weekvalue`) with a single `bypass` policy. Cloudflare Access matches by longest path prefix, so this one wins over the domain-wide app for anything under `/weekvalue`. It exists so Home Assistant can poll the endpoint without an interactive login. Any new unauthenticated endpoint needs the same treatment: a new Access app scoped to its exact path with a bypass policy — don't add exceptions to the main `degiro` app's policy, that would open the whole domain.
+- `/api/value` gets the same treatment: `degiro api/value (public, no auth)`, id `REDACTED_APP_ID_APIVALUE`, domain `redacted.example.com/api/value`, single `bypass` policy. Same reason — Home Assistant polls it directly.
 
 ## `/weekvalue` — public SVG endpoint for Home Assistant
 
