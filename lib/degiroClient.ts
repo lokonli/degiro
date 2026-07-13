@@ -1,9 +1,10 @@
 import crypto from "crypto";
-import type { Transaction } from "@/lib/types";
+import type { Transaction, Dividend } from "@/lib/types";
 
 const LOGIN_URL = "https://trader.degiro.nl/login/secure/login";
 const CLIENT_DETAILS_URL = "https://trader.degiro.nl/pa/secure/client";
 const TRANSACTIONS_HISTORY_URL = "https://trader.degiro.nl/portfolio-reports/secure/v4/transactions";
+const ACCOUNT_OVERVIEW_URL = "https://trader.degiro.nl/portfolio-reports/secure/v6/accountoverview";
 const PRODUCTS_INFO_URL = "https://trader.degiro.nl/product_search/secure/v5/products/info";
 
 const REQUEST_HEADERS = {
@@ -160,6 +161,81 @@ function toAmsterdamDateTime(iso: string): { date: string; time: string } {
     hour12: false,
   }).format(d);
   return { date, time };
+}
+
+type CashMovement = {
+  id: number;
+  valueDate: string;
+  description?: string;
+  productId?: number;
+  change?: number;
+};
+
+async function getAccountOverview(
+  sessionId: string,
+  intAccount: number,
+  fromDate: string,
+  toDate: string
+): Promise<CashMovement[]> {
+  const params = new URLSearchParams({
+    fromDate: toDdMmYyyy(fromDate),
+    toDate: toDdMmYyyy(toDate),
+    intAccount: String(intAccount),
+    sessionId,
+  });
+  const res = await fetch(`${ACCOUNT_OVERVIEW_URL}?${params}`, { headers: REQUEST_HEADERS });
+  if (!res.ok) throw new Error(`DEGIRO account overview failed: HTTP ${res.status}`);
+  const json = await res.json();
+  return (json?.data?.cashMovements ?? []) as CashMovement[];
+}
+
+/**
+ * Fetches dividend cash movements in [fromDate, toDate] (inclusive, "YYYY-MM-DD"). DEGIRO records each
+ * payout as two separate cash-movement rows sharing the same product/value-date: a "Dividend" credit and
+ * a "Dividendbelasting" (withholding tax) debit — these are paired here into one net Dividend per payout.
+ */
+export async function fetchDegiroDividends(fromDate: string, toDate: string): Promise<Dividend[]> {
+  const sessionId = await degiroLogin();
+  const intAccount = await getIntAccount(sessionId);
+  const movements = await getAccountOverview(sessionId, intAccount, fromDate, toDate);
+
+  const dividendMovements = movements.filter((m) => m.productId != null && /dividend/i.test(m.description ?? ""));
+  if (dividendMovements.length === 0) return [];
+
+  const productIds = Array.from(new Set(dividendMovements.map((m) => m.productId!)));
+  const products = await getProductsInfo(sessionId, intAccount, productIds);
+
+  type Group = { productId: number; valueDate: string; gross: CashMovement | null; taxEUR: number };
+  const groups = new Map<string, Group>();
+  for (const m of dividendMovements) {
+    const key = `${m.productId}|${m.valueDate}`;
+    const group = groups.get(key) ?? { productId: m.productId!, valueDate: m.valueDate, gross: null, taxEUR: 0 };
+    if (/belasting|tax/i.test(m.description ?? "")) {
+      group.taxEUR += Math.abs(m.change ?? 0);
+    } else {
+      group.gross = m;
+    }
+    groups.set(key, group);
+  }
+
+  const out: Dividend[] = [];
+  for (const group of groups.values()) {
+    if (!group.gross) continue; // a tax row with no matching gross entry in this window — nothing to attribute it to
+    const product = products.get(group.productId);
+    if (!product?.isin) continue; // no ISIN to key this position on — skip rather than guess
+    const grossEUR = group.gross.change ?? 0;
+    const { date } = toAmsterdamDateTime(group.gross.valueDate);
+    out.push({
+      id: String(group.gross.id),
+      date,
+      isin: product.isin,
+      product: product.name ?? product.isin,
+      grossEUR,
+      taxEUR: group.taxEUR,
+      netEUR: grossEUR - group.taxEUR,
+    });
+  }
+  return out.sort((a, b) => a.date.localeCompare(b.date));
 }
 
 /** Fetches buy/sell transactions in [fromDate, toDate] (inclusive, "YYYY-MM-DD") and maps them to this app's Transaction shape. */

@@ -13,6 +13,8 @@ type SyncResult = {
   addedCount: number;
   duplicateCount: number;
   totalTransactions: number;
+  addedDividendCount: number;
+  totalDividends: number;
   newInstruments: { isin: string; name: string; ticker: string; currency: string }[];
   unresolvedIsins: { isin: string; name: string }[];
 };
@@ -101,6 +103,10 @@ export default function DegiroSyncPanel() {
                 : "no new transactions — already up to date"}
             </div>
             <div className="mt-1 text-xs text-ink-faint">{result.totalTransactions} transactions total</div>
+            <div className="mt-1 text-xs text-ink-faint">
+              {result.addedDividendCount > 0 ? `+${result.addedDividendCount} new dividend${result.addedDividendCount === 1 ? "" : "s"} · ` : ""}
+              {result.totalDividends} dividends total
+            </div>
           </div>
 
           {result.newInstruments.length > 0 && (

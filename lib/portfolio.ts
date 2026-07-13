@@ -1,4 +1,4 @@
-import { readTransactions, readInstruments } from "@/lib/dataStore";
+import { readTransactions, readInstruments, readDividends } from "@/lib/dataStore";
 import { fetchDailyCloses, type PriceSeries } from "@/lib/yahoo";
 
 export type { Transaction, Instrument } from "@/lib/types";
@@ -37,6 +37,9 @@ export type PortfolioSeries = {
   portfolioValue: number[];
   netInvested: number[];
   performancePct: number[];
+  netInvestedInclDividends: number[];
+  performancePctInclDividends: number[];
+  totalDividendsEUR: number;
   holdings: HoldingPoint[]; // latest snapshot
   totalFeesEUR: number;
   asOf: string;
@@ -44,13 +47,20 @@ export type PortfolioSeries = {
 };
 
 export async function computePortfolioSeries(): Promise<PortfolioSeries> {
-  const [txns, instrumentMap] = await Promise.all([readTransactions(), readInstruments()]);
+  const [txns, instrumentMap, dividends] = await Promise.all([
+    readTransactions(),
+    readInstruments(),
+    readDividends(),
+  ]);
   if (txns.length === 0) {
     return {
       dates: [],
       portfolioValue: [],
       netInvested: [],
       performancePct: [],
+      netInvestedInclDividends: [],
+      performancePctInclDividends: [],
+      totalDividendsEUR: 0,
       holdings: [],
       totalFeesEUR: 0,
       asOf: new Date().toISOString().slice(0, 10),
@@ -101,21 +111,35 @@ export async function computePortfolioSeries(): Promise<PortfolioSeries> {
 
   const portfolioValue: number[] = new Array(dates.length).fill(0);
   const netInvested: number[] = new Array(dates.length).fill(0);
+  const netInvestedInclDividends: number[] = new Array(dates.length).fill(0);
   const unitsByIsin = new Map<string, number>(allIsins.map((i) => [i, 0]));
   let cumNetCash = 0;
+  let cumNetCashInclDividends = 0;
   let totalFeesEUR = 0;
+  let totalDividendsEUR = 0;
 
   let txnIdx = 0;
+  let divIdx = 0;
   for (let d = 0; d < dates.length; d++) {
     const day = dates[d];
     while (txnIdx < txns.length && txns[txnIdx].date === day) {
       const t = txns[txnIdx];
       unitsByIsin.set(t.isin, (unitsByIsin.get(t.isin) ?? 0) + t.quantity);
       cumNetCash += -t.totalEUR;
+      cumNetCashInclDividends += -t.totalEUR;
       totalFeesEUR += t.fees;
       txnIdx++;
     }
+    // Dividend cash isn't tracked as a balance anywhere in this model (portfolioValue is holdings-only),
+    // so it's folded in the same way a sell's proceeds are: reducing the capital still considered "at risk".
+    // That makes performancePctInclDividends a total-return figure without needing to model a cash account.
+    while (divIdx < dividends.length && dividends[divIdx].date === day) {
+      cumNetCashInclDividends += -dividends[divIdx].netEUR;
+      totalDividendsEUR += dividends[divIdx].netEUR;
+      divIdx++;
+    }
     netInvested[d] = cumNetCash;
+    netInvestedInclDividends[d] = cumNetCashInclDividends;
 
     let value = 0;
     for (const isin of isins) {
@@ -128,6 +152,9 @@ export async function computePortfolioSeries(): Promise<PortfolioSeries> {
 
   const performancePct = portfolioValue.map((v, i) =>
     netInvested[i] > 0 ? ((v - netInvested[i]) / netInvested[i]) * 100 : 0
+  );
+  const performancePctInclDividends = portfolioValue.map((v, i) =>
+    netInvestedInclDividends[i] > 0 ? ((v - netInvestedInclDividends[i]) / netInvestedInclDividends[i]) * 100 : 0
   );
 
   const lastDay = dates.length - 1;
@@ -144,6 +171,9 @@ export async function computePortfolioSeries(): Promise<PortfolioSeries> {
     portfolioValue,
     netInvested,
     performancePct,
+    netInvestedInclDividends,
+    performancePctInclDividends,
+    totalDividendsEUR,
     holdings,
     totalFeesEUR,
     asOf: today,

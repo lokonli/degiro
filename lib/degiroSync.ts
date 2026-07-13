@@ -7,9 +7,11 @@ import {
   readInstruments,
   writeInstruments,
   transactionCompositeKey,
+  readDividends,
+  writeDividends,
 } from "@/lib/dataStore";
 import { resolveInstrument } from "@/lib/instruments";
-import { fetchDegiroTransactions } from "@/lib/degiroClient";
+import { fetchDegiroTransactions, fetchDegiroDividends } from "@/lib/degiroClient";
 
 const SYNC_META_PATH = path.join(process.cwd(), "data", "degiro-sync-meta.json");
 
@@ -24,6 +26,8 @@ export type SyncResult = {
   addedCount: number;
   duplicateCount: number;
   totalTransactions: number;
+  addedDividendCount: number;
+  totalDividends: number;
   newInstruments: { isin: string; name: string; ticker: string; currency: string }[];
   unresolvedIsins: { isin: string; name: string }[];
 };
@@ -55,13 +59,23 @@ function shiftDate(iso: string, days: number): string {
  */
 export async function runDegiroSync(opts: { revalidate?: boolean } = {}): Promise<SyncResult> {
   try {
-    const [existing, instrumentMap] = await Promise.all([readTransactions(), readInstruments()]);
+    const [existing, instrumentMap, existingDividends] = await Promise.all([
+      readTransactions(),
+      readInstruments(),
+      readDividends(),
+    ]);
+
+    const toDate = new Date().toISOString().slice(0, 10);
 
     const lastDate = existing.reduce((max, t) => (t.date > max ? t.date : max), "2000-01-01");
     const fromDate = shiftDate(lastDate, -3);
-    const toDate = new Date().toISOString().slice(0, 10);
-
     const fetched = await fetchDegiroTransactions(fromDate, toDate);
+
+    // Separate cursor: transactions.json may already hold years of history (from earlier CSV imports)
+    // while dividends.json starts empty, so it needs its own from-scratch catch-up window.
+    const lastDividendDate = existingDividends.reduce((max, d) => (d.date > max ? d.date : max), "2000-01-01");
+    const dividendFromDate = shiftDate(lastDividendDate, -3);
+    const fetchedDividends = await fetchDegiroDividends(dividendFromDate, toDate);
 
     const existingKeys = new Set(existing.map((t) => transactionCompositeKey(t)));
     const added = fetched.filter((row) => {
@@ -86,14 +100,23 @@ export async function runDegiroSync(opts: { revalidate?: boolean } = {}): Promis
       }
     }
 
-    if (added.length > 0) {
+    const existingDividendIds = new Set(existingDividends.map((d) => d.id));
+    const addedDividends = fetchedDividends.filter((d) => {
+      if (existingDividendIds.has(d.id)) return false;
+      existingDividendIds.add(d.id);
+      return true;
+    });
+
+    if (added.length > 0 || addedDividends.length > 0) {
       await Promise.all([
-        writeTransactions([...existing, ...added]),
+        added.length > 0 ? writeTransactions([...existing, ...added]) : Promise.resolve(),
         newIsins.length > 0 ? writeInstruments(instrumentMap) : Promise.resolve(),
+        addedDividends.length > 0 ? writeDividends([...existingDividends, ...addedDividends]) : Promise.resolve(),
       ]);
       if (opts.revalidate) {
         revalidatePath("/");
         revalidatePath("/api/portfolio");
+        revalidatePath("/dividends");
       }
     }
 
@@ -101,6 +124,8 @@ export async function runDegiroSync(opts: { revalidate?: boolean } = {}): Promis
       addedCount: added.length,
       duplicateCount: fetched.length - added.length,
       totalTransactions: existing.length + added.length,
+      addedDividendCount: addedDividends.length,
+      totalDividends: existingDividends.length + addedDividends.length,
       newInstruments: resolvedInstruments,
       unresolvedIsins,
     };

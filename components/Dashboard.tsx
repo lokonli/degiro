@@ -209,6 +209,11 @@ export default function Dashboard({ series }: { series: PortfolioSeries }) {
   const totalReturn = currentValue - netInvested;
   const totalReturnPct = series.performancePct[n - 1];
   const gainTone = totalReturn >= 0 ? "gain" : "loss";
+
+  const netInvestedInclDividends = series.netInvestedInclDividends[n - 1];
+  const totalReturnInclDividends = currentValue - netInvestedInclDividends;
+  const totalReturnInclDividendsPct = series.performancePctInclDividends[n - 1];
+  const gainToneInclDividends = totalReturnInclDividends >= 0 ? "gain" : "loss";
   const performanceIsShortRange = performanceRange === "today" || performanceRange === "week" || performanceRange === "month";
 
   const totalAllocated = series.holdings.reduce((s, h) => s + h.valueEUR, 0);
@@ -225,6 +230,12 @@ export default function Dashboard({ series }: { series: PortfolioSeries }) {
           </p>
         </div>
         <div className="flex items-center gap-3 pt-1">
+          <Link
+            href="/dividends"
+            className="flex h-8 items-center rounded-full border border-border px-3.5 text-xs font-medium text-ink-muted transition-colors hover:border-border-strong hover:text-ink"
+          >
+            Dividends
+          </Link>
           <Link
             href="/import"
             className="flex h-8 items-center rounded-full bg-accent px-3.5 text-xs font-medium text-bg transition-opacity hover:opacity-90"
@@ -245,7 +256,7 @@ export default function Dashboard({ series }: { series: PortfolioSeries }) {
         </div>
       )}
 
-      <section className="grid grid-cols-2 gap-3 sm:grid-cols-4">
+      <section className="grid grid-cols-2 gap-3 sm:grid-cols-3 lg:grid-cols-5">
         <StatTile label="Current value" value={eur.format(currentValue)} />
         <StatTile label="Net invested" value={eur.format(netInvested)} />
         <StatTile
@@ -253,6 +264,12 @@ export default function Dashboard({ series }: { series: PortfolioSeries }) {
           value={`${totalReturn >= 0 ? "+" : ""}${eur.format(totalReturn)}`}
           sub={pct(totalReturnPct)}
           tone={gainTone}
+        />
+        <StatTile
+          label="Total return (incl. dividends)"
+          value={`${totalReturnInclDividends >= 0 ? "+" : ""}${eur.format(totalReturnInclDividends)}`}
+          sub={pct(totalReturnInclDividendsPct)}
+          tone={gainToneInclDividends}
         />
         <StatTile label="Fees paid" value={eur.format(Math.abs(series.totalFeesEUR))} />
       </section>

@@ -13,6 +13,16 @@ export type Transaction = {
   totalEUR: number;
 };
 
+export type Dividend = {
+  id: string; // DEGIRO cash-movement id of the gross "Dividend" entry — stable identity
+  date: string; // YYYY-MM-DD, Amsterdam local (from the movement's value date)
+  isin: string;
+  product: string;
+  grossEUR: number;
+  taxEUR: number; // withholding tax, positive = amount withheld
+  netEUR: number; // grossEUR - taxEUR, what actually hit cash
+};
+
 export type Instrument = {
   name: string;
   ticker: string;
