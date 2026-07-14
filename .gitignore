@@ -37,6 +37,10 @@ yarn-error.log*
 # operational metadata written by the DEGIRO API sync, not application data
 /data/degiro-sync-meta.json
 
+# live production data (personal financial data) — never publish this
+/data/transactions.json
+/data/degiro-transactions.csv
+
 # vercel
 .vercel
 
