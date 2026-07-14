@@ -36,6 +36,43 @@ Data lives on disk under `data/` (`transactions.json`, `instruments.json`,
 `dividends.json`) and is read at request time — there's no separate database.
 These files are gitignored since they hold personal financial data.
 
+## DEGIRO API sync credentials
+
+The CSV import (`/import`) works with no setup. The optional direct DEGIRO
+API sync (`lib/degiroClient.ts`, `lib/degiroSync.ts`, `POST /api/degiro-sync`)
+needs three env vars — copy `.env.example` to `.env.local` (gitignored) and
+fill them in:
+
+```
+DEGIRO_USERNAME=
+DEGIRO_PASSWORD=
+DEGIRO_TOTP_SECRET=
+```
+
+- `DEGIRO_USERNAME` / `DEGIRO_PASSWORD` — your normal DEGIRO login
+  credentials.
+- `DEGIRO_TOTP_SECRET` — the **base32 seed** behind your account's
+  authenticator-app 2FA, not a 6-digit code (the app generates the code
+  itself, the same way an authenticator app would — see
+  `generateTotp`/`base32Decode` in `lib/degiroClient.ts`). DEGIRO's UI only
+  shows this seed once, at setup time, disguised as a QR code:
+  1. In the DEGIRO webtrader, go to **Settings → Profile → Two-factor
+     authentication** (or **Security**, depending on the current UI) and
+     start (or reset) the authenticator-app setup.
+  2. On the "scan this QR code" screen, look for a **"can't scan the code?"**
+     / **"enter manually"** link — it reveals the same secret as a plain
+     base32 string instead of a QR code. That string is `DEGIRO_TOTP_SECRET`.
+  3. Finish enrollment by entering the current 6-digit code the secret
+     produces (e.g. paste the secret into any authenticator app or use
+     `generateTotp` locally) to confirm 2FA setup.
+  4. If you already enabled 2FA and never saved the seed, DEGIRO won't show
+     it to you again — you'll need to disable and re-enable 2FA to get a
+     fresh one.
+
+Treat `DEGIRO_TOTP_SECRET` like a password: it's a long-lived credential that
+can mint valid 2FA codes indefinitely, not a one-time code. Never commit
+`.env.local`.
+
 ## Tech
 
 Next.js (App Router) + React + TypeScript + Tailwind CSS + Recharts.
