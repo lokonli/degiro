@@ -116,6 +116,7 @@ export async function runDegiroSync(opts: { revalidate?: boolean } = {}): Promis
       if (opts.revalidate) {
         revalidatePath("/");
         revalidatePath("/api/portfolio");
+        revalidatePath("/api/value");
         revalidatePath("/dividends");
       }
     }
