@@ -40,19 +40,38 @@ export async function fetchDailyCloses(symbol: string, range = "5y"): Promise<Pr
   return series;
 }
 
-export type LiveQuote = { price: number; previousClose: number };
+export type LiveQuote = { price: number; previousClose: number; hasTradedToday: boolean };
+
+function exchangeLocalDate(epochSeconds: number, timeZone: string): string {
+  return new Intl.DateTimeFormat("en-CA", { timeZone, year: "numeric", month: "2-digit", day: "2-digit" }).format(
+    new Date(epochSeconds * 1000)
+  );
+}
 
 /**
  * Current price vs. the prior trading day's close, for "today's change" figures. Pulled from a small
  * range so `chartPreviousClose` reflects yesterday's actual close — at wide ranges (e.g. the 5y range
  * `fetchDailyCloses` uses) Yahoo returns the close from the *start* of that range instead.
+ *
+ * Before an exchange's regular session opens, `regularMarketPrice` is still yesterday's closing trade
+ * (Yahoo doesn't zero it out), so naively diffing against `previousClose` reports yesterday's move as
+ * "today's change". `hasTradedToday` flags that case by comparing `regularMarketTime`'s exchange-local
+ * date against today's — callers should treat today's change as 0 when it's false.
  */
 export async function fetchLiveQuote(symbol: string): Promise<LiveQuote | null> {
   const result = await fetchChart(symbol, "5d", LIVE_QUOTE_REVALIDATE_SECONDS);
   const price = result?.meta?.regularMarketPrice;
   const previousClose = result?.meta?.chartPreviousClose ?? result?.meta?.previousClose;
   if (price == null || previousClose == null) return null;
-  return { price, previousClose };
+
+  const regularMarketTime = result?.meta?.regularMarketTime;
+  const timeZone = result?.meta?.exchangeTimezoneName ?? "UTC";
+  const hasTradedToday =
+    regularMarketTime == null
+      ? true
+      : exchangeLocalDate(regularMarketTime, timeZone) === exchangeLocalDate(Date.now() / 1000, timeZone);
+
+  return { price, previousClose, hasTradedToday };
 }
 
 /** Confirms a symbol has real chartable history and reports its quote currency. */

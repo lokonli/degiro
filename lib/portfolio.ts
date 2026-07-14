@@ -220,6 +220,12 @@ export async function computePortfolioSeries(): Promise<PortfolioSeries> {
     const previousEUR = liveEurPrice(isin, quote.previousClose, "previousClose");
     if (currentEUR == null || previousEUR == null || previousEUR === 0) continue;
     const units = unitsByIsin.get(isin) ?? 0;
+    // Before this instrument's exchange opens today, regularMarketPrice is still yesterday's close, so
+    // there's no real move to report yet — count it at zero change rather than yesterday's stale delta.
+    if (!quote.hasTradedToday) {
+      todayChangeByIsin.set(isin, { changeEUR: 0, changePct: 0, previousValueEUR: units * currentEUR });
+      continue;
+    }
     todayChangeByIsin.set(isin, {
       changeEUR: units * (currentEUR - previousEUR),
       changePct: ((currentEUR - previousEUR) / previousEUR) * 100,
