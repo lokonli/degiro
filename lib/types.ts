@@ -28,6 +28,7 @@ export type Instrument = {
   ticker: string;
   currency: string; // ISO code as quoted by the price feed, e.g. "EUR", "USD", "GBP"
   priceScale?: number; // multiply raw ticker price by this to reach `currency` units (handles GBp pence quotes)
+  degiroId?: string; // DEGIRO's internal product id, for pricing live via the DEGIRO connector instead of Yahoo
 };
 
 export type InstrumentMap = Record<string, Instrument>;

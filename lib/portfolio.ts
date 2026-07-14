@@ -1,5 +1,6 @@
 import { readTransactions, readInstruments, readDividends } from "@/lib/dataStore";
 import { fetchDailyCloses, fetchLiveQuote, type PriceSeries, type LiveQuote } from "@/lib/yahoo";
+import { getCachedDegiroLivePortfolio } from "@/lib/degiroClient";
 
 export type { Transaction, Instrument } from "@/lib/types";
 
@@ -180,20 +181,56 @@ export async function computePortfolioSeries(): Promise<PortfolioSeries> {
     .filter((d) => d.date >= currentYearStart)
     .reduce((s, d) => s + d.netEUR, 0);
 
-  // "Today's change" uses live quotes, fetched only for currently-held positions — separate from the
-  // EOD daily-close series above (which drives valueEUR) since intraday prices aren't part of that history.
+  // "Today's change" prices currently-held positions live, separate from the EOD daily-close series
+  // above (which drives valueEUR) since intraday prices aren't part of that history. DEGIRO's own live
+  // feed is tried first — it's the broker's real-time price, closer to "actual" than Yahoo's delayed/
+  // session-pinned quotes. Yahoo is the fallback for holdings without a stored degiroId yet (see
+  // lib/degiroSync.ts's backfill) or if the DEGIRO pull fails outright (getCachedDegiroLivePortfolio
+  // never throws — a null result just means every held ISIN falls back to Yahoo for this request).
+  const lastDay = dates.length - 1;
   const heldIsins = isins.filter((isin) => Math.abs(unitsByIsin.get(isin) ?? 0) > 1e-9);
+
+  const degiroLive = await getCachedDegiroLivePortfolio();
+  const degiroPriceByDegiroId = new Map<string, number>(
+    (degiroLive?.positions ?? []).map((p) => [p.degiroId, p.priceEUR])
+  );
+
+  const todayChangeByIsin = new Map<string, { changeEUR: number; changePct: number; previousValueEUR: number }>();
+  const yahooFallbackIsins: string[] = [];
+
+  for (const isin of heldIsins) {
+    const degiroId = instrumentMap[isin].degiroId;
+    const degiroPriceEUR = degiroId ? degiroPriceByDegiroId.get(degiroId) : undefined;
+    if (degiroPriceEUR == null) {
+      yahooFallbackIsins.push(isin);
+      continue;
+    }
+    if (lastDay < 1) continue; // not enough history yet to have a prior-day close to diff against
+    // DEGIRO's price is already EUR-converted, so no FX lookup is needed here (unlike the Yahoo path
+    // below). The previous-close baseline still comes from the EOD series above (Yahoo), which also
+    // means there's no need for a "has this exchange traded today" guard: pre-market, DEGIRO's live
+    // price still equals yesterday's close, so the diff against that same close naturally reads ~0.
+    const previousEUR = priceInEurAt(isin, lastDay - 1);
+    if (previousEUR === 0) continue;
+    const units = unitsByIsin.get(isin) ?? 0;
+    todayChangeByIsin.set(isin, {
+      changeEUR: units * (degiroPriceEUR - previousEUR),
+      changePct: ((degiroPriceEUR - previousEUR) / previousEUR) * 100,
+      previousValueEUR: units * previousEUR,
+    });
+  }
+
   const heldForeignCurrencies = Array.from(
-    new Set(heldIsins.map((isin) => instrumentMap[isin].currency).filter((c) => c !== "EUR"))
+    new Set(yahooFallbackIsins.map((isin) => instrumentMap[isin].currency).filter((c) => c !== "EUR"))
   );
 
   const [liveQuoteList, liveFxList] = await Promise.all([
-    Promise.all(heldIsins.map((isin) => fetchLiveQuote(instrumentMap[isin].ticker))),
+    Promise.all(yahooFallbackIsins.map((isin) => fetchLiveQuote(instrumentMap[isin].ticker))),
     Promise.all(heldForeignCurrencies.map((c) => fetchLiveQuote(`EUR${c}=X`))),
   ]);
 
   const liveQuoteByIsin = new Map<string, LiveQuote>();
-  heldIsins.forEach((isin, i) => {
+  yahooFallbackIsins.forEach((isin, i) => {
     const quote = liveQuoteList[i];
     if (quote) liveQuoteByIsin.set(isin, quote);
   });
@@ -212,8 +249,7 @@ export async function computePortfolioSeries(): Promise<PortfolioSeries> {
     return scaled / fxQuote[fxField];
   }
 
-  const todayChangeByIsin = new Map<string, { changeEUR: number; changePct: number; previousValueEUR: number }>();
-  for (const isin of heldIsins) {
+  for (const isin of yahooFallbackIsins) {
     const quote = liveQuoteByIsin.get(isin);
     if (!quote) continue;
     const currentEUR = liveEurPrice(isin, quote.price, "price");
@@ -236,8 +272,6 @@ export async function computePortfolioSeries(): Promise<PortfolioSeries> {
   const todayChangeEUR = Array.from(todayChangeByIsin.values()).reduce((s, c) => s + c.changeEUR, 0);
   const todayPreviousValueEUR = Array.from(todayChangeByIsin.values()).reduce((s, c) => s + c.previousValueEUR, 0);
   const todayChangePct = todayPreviousValueEUR > 0 ? (todayChangeEUR / todayPreviousValueEUR) * 100 : 0;
-
-  const lastDay = dates.length - 1;
   const holdings: HoldingPoint[] = isins
     .map((isin) => {
       const units = unitsByIsin.get(isin) ?? 0;

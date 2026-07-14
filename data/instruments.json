@@ -2,22 +2,26 @@
   "IE00BK5BQT80": {
     "name": "Vanguard FTSE All-World UCITS ETF (USD) Acc",
     "ticker": "VWRA.L",
-    "currency": "USD"
+    "currency": "USD",
+    "degiroId": "19748698"
   },
   "IE0006WW1TQ4": {
     "name": "Xtrackers MSCI World ex USA UCITS ETF",
     "ticker": "EXUS.DE",
-    "currency": "EUR"
+    "currency": "EUR",
+    "degiroId": "29265561"
   },
   "IE00B3YLTY66": {
     "name": "SPDR MSCI ACWI IMI UCITS ETF Acc",
     "ticker": "SPYI.DE",
-    "currency": "EUR"
+    "currency": "EUR",
+    "degiroId": "19748466"
   },
   "LU1829219390": {
     "name": "Amundi Euro Stoxx Banks UCITS ETF Acc",
     "ticker": "BNKE.PA",
-    "currency": "EUR"
+    "currency": "EUR",
+    "degiroId": "15292595"
   },
   "IE000OJ5TQP4": {
     "name": "Future of Defence UCITS ETF Acc",
@@ -32,7 +36,8 @@
   "NL0010408704": {
     "name": "VanEck World Equal Weight Screened UCITS ETF",
     "ticker": "TSWE.AS",
-    "currency": "EUR"
+    "currency": "EUR",
+    "degiroId": "2506616"
   },
   "IE00BYYHSM20": {
     "name": "iShares Europe Quality Dividend UCITS ETF Dist",

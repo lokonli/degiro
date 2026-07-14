@@ -11,7 +11,13 @@ import {
   writeDividends,
 } from "@/lib/dataStore";
 import { resolveInstrument } from "@/lib/instruments";
-import { fetchDegiroTransactions, fetchDegiroDividends } from "@/lib/degiroClient";
+import {
+  fetchDegiroTransactions,
+  fetchDegiroDividends,
+  getCachedDegiroLivePortfolio,
+  getDegiroProductsInfo,
+} from "@/lib/degiroClient";
+import type { InstrumentMap } from "@/lib/types";
 
 const SYNC_META_PATH = path.join(process.cwd(), "data", "degiro-sync-meta.json");
 
@@ -45,6 +51,33 @@ async function writeSyncMeta(meta: SyncMeta): Promise<void> {
   await fs.writeFile(SYNC_META_PATH, JSON.stringify(meta, null, 2) + "\n", "utf-8");
 }
 
+/**
+ * Fills in `degiroId` for currently-held instruments that predate this field (i.e. most existing
+ * holdings, whose most recent transaction is outside the sync's lookback window) so lib/portfolio.ts's
+ * live-price path can price them via DEGIRO instead of Yahoo. Self-healing: a no-op once every held
+ * ISIN has been backfilled, so it costs nothing on subsequent daily runs.
+ */
+async function backfillDegiroProductIds(instrumentMap: InstrumentMap): Promise<number> {
+  const missingIsins = Object.keys(instrumentMap).filter((isin) => !instrumentMap[isin].degiroId);
+  if (missingIsins.length === 0) return 0;
+
+  const live = await getCachedDegiroLivePortfolio();
+  if (!live || live.positions.length === 0) return 0;
+
+  const degiroIds = live.positions.map((p) => Number(p.degiroId)).filter((id) => Number.isFinite(id));
+  const products = await getDegiroProductsInfo(degiroIds);
+
+  let changed = 0;
+  for (const position of live.positions) {
+    const product = products.get(Number(position.degiroId));
+    const isin = product?.isin;
+    if (!isin || !instrumentMap[isin] || instrumentMap[isin].degiroId) continue;
+    instrumentMap[isin].degiroId = position.degiroId;
+    changed++;
+  }
+  return changed;
+}
+
 function shiftDate(iso: string, days: number): string {
   const d = new Date(iso + "T00:00:00Z");
   d.setUTCDate(d.getUTCDate() + days);
@@ -69,7 +102,7 @@ export async function runDegiroSync(opts: { revalidate?: boolean } = {}): Promis
 
     const lastDate = existing.reduce((max, t) => (t.date > max ? t.date : max), "2000-01-01");
     const fromDate = shiftDate(lastDate, -3);
-    const fetched = await fetchDegiroTransactions(fromDate, toDate);
+    const { transactions: fetched, isinToDegiroId } = await fetchDegiroTransactions(fromDate, toDate);
 
     // Separate cursor: transactions.json may already hold years of history (from earlier CSV imports)
     // while dividends.json starts empty, so it needs its own from-scratch catch-up window.
@@ -93,12 +126,15 @@ export async function runDegiroSync(opts: { revalidate?: boolean } = {}): Promis
       const sampleName = added.find((t) => t.isin === isin)?.product ?? isin;
       const resolved = await resolveInstrument(isin, sampleName);
       if (resolved) {
+        resolved.degiroId = isinToDegiroId.get(isin);
         instrumentMap[isin] = resolved;
         resolvedInstruments.push({ isin, name: resolved.name, ticker: resolved.ticker, currency: resolved.currency });
       } else {
         unresolvedIsins.push({ isin, name: sampleName });
       }
     }
+
+    const backfilledCount = await backfillDegiroProductIds(instrumentMap);
 
     const existingDividendIds = new Set(existingDividends.map((d) => d.id));
     const addedDividends = fetchedDividends.filter((d) => {
@@ -107,15 +143,16 @@ export async function runDegiroSync(opts: { revalidate?: boolean } = {}): Promis
       return true;
     });
 
-    if (added.length > 0 || addedDividends.length > 0) {
+    if (added.length > 0 || addedDividends.length > 0 || backfilledCount > 0) {
       await Promise.all([
         added.length > 0 ? writeTransactions([...existing, ...added]) : Promise.resolve(),
-        newIsins.length > 0 ? writeInstruments(instrumentMap) : Promise.resolve(),
+        newIsins.length > 0 || backfilledCount > 0 ? writeInstruments(instrumentMap) : Promise.resolve(),
         addedDividends.length > 0 ? writeDividends([...existingDividends, ...addedDividends]) : Promise.resolve(),
       ]);
       if (opts.revalidate) {
         revalidatePath("/");
         revalidatePath("/api/portfolio");
+        revalidatePath("/api/value");
         revalidatePath("/dividends");
       }
     }
