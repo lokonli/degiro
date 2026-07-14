@@ -1,8 +1,12 @@
 # Dashboard charts
 
-Notes on `components/Dashboard.tsx`'s charts — read this before touching the
-"Return by year" bar chart or adding another derived-stat chart to the
-dashboard.
+Notes on the dashboard's charts — read this before touching the "Return by
+year" bar chart or adding another derived-stat chart to the dashboard.
+
+`components/Dashboard.tsx` is a thin layout shell; each chart/section lives
+in its own file under `components/dashboard/` (e.g. `ValueChart.tsx`,
+`PerformanceChart.tsx`, `YearlyReturnsChart.tsx`, `HoldingsTable.tsx`), with
+shared formatters in `components/dashboard/format.ts`.
 
 ## "Return by year" bar chart
 
@@ -10,7 +14,7 @@ Shows each calendar year's total return (incl. dividends) as a EUR bar,
 labeled with the EUR gain/loss on top and that year's return as a percentage
 of average invested capital in brackets below it.
 
-### Data: `computeYearlyReturns` (defined locally in `Dashboard.tsx`)
+### Data: `computeYearlyReturns` (defined locally in `components/dashboard/YearlyReturnsChart.tsx`)
 
 `PortfolioSeries.portfolioValue` and `netInvestedInclDividends` (from
 `lib/portfolio.ts`) are cumulative running series, one entry per calendar
@@ -48,20 +52,22 @@ existing "Total return (incl. dividends)" stat tile's convention rather than
 the dividend-excluded `performancePct`/`netInvested` pair — this was an
 explicit choice, not a default to leave unquestioned if revisited.
 
-### Why this logic lives in `Dashboard.tsx`, not `lib/portfolio.ts`
+### Why this logic lives next to the chart component, not `lib/portfolio.ts`
 
 `lib/portfolio.ts` imports `lib/dataStore.ts`, which imports Node's `fs`.
-`Dashboard.tsx` is a `"use client"` component — importing any *runtime*
-value (not just a `import type`) from `lib/portfolio.ts` pulls that whole
-module graph, `fs` included, into the client bundle and breaks the build
-("Module not found: Can't resolve 'fs'"). This bit during development:
-`computeYearlyReturns` was first written in `lib/portfolio.ts` and had to be
-moved into `Dashboard.tsx` itself once the build broke. The existing
-`rebasePerformance` helper (for the performance-% line chart) is defined
-locally in `Dashboard.tsx` for the same reason — this is the established
-pattern for derived-stat functions used only by client chart components:
-they take an already-fetched `PortfolioSeries` and live next to their chart,
-not in `lib/`.
+The dashboard's chart components are `"use client"` — importing any
+*runtime* value (not just a `import type`) from `lib/portfolio.ts` pulls
+that whole module graph, `fs` included, into the client bundle and breaks
+the build ("Module not found: Can't resolve 'fs'"). This bit during
+development: `computeYearlyReturns` was first written in `lib/portfolio.ts`
+and had to be moved into the client component itself once the build broke.
+The `rebasePerformance` helper (for the performance-% line chart) lives in
+`components/dashboard/PerformanceChart.tsx` for the same reason — this is
+the established pattern for derived-stat functions used only by one client
+chart component: they take an already-fetched `PortfolioSeries` (or
+`ChartPoint[]`) and live next to their chart, not in `lib/`. Only `import
+type { PortfolioSeries }` (type-only, erased at compile time) is safe to use
+from any of these files — a runtime import is what breaks the build.
 
 ### The label: `LabelList`'s `content` function doesn't get `payload`
 
