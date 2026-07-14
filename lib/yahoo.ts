@@ -49,20 +49,23 @@ function exchangeLocalDate(epochSeconds: number, timeZone: string): string {
 }
 
 /**
- * Current price vs. the prior trading day's close, for "today's change" figures. Pulled from a small
- * range so `chartPreviousClose` reflects yesterday's actual close — at wide ranges (e.g. the 5y range
- * `fetchDailyCloses` uses) Yahoo returns the close from the *start* of that range instead.
+ * Current price vs. the prior trading day's close, for "today's change" figures.
  *
  * Before an exchange's regular session opens, `regularMarketPrice` is still yesterday's closing trade
  * (Yahoo doesn't zero it out), so naively diffing against `previousClose` reports yesterday's move as
  * "today's change". `hasTradedToday` flags that case by comparing `regularMarketTime`'s exchange-local
  * date against today's — callers should treat today's change as 0 when it's false.
+ *
+ * `previousClose` is derived from the dated daily bars, not Yahoo's `chartPreviousClose` meta field —
+ * that field has been observed returning a close from several trading days back instead of the true
+ * prior session (e.g. reporting a 4-day-old close), which silently inflates "today's change" by whatever
+ * moved across the skipped days. The bars are date-stamped, so the correct prior close can be found
+ * directly: the last bar before whichever day `regularMarketPrice` itself reflects.
  */
 export async function fetchLiveQuote(symbol: string): Promise<LiveQuote | null> {
   const result = await fetchChart(symbol, "5d", LIVE_QUOTE_REVALIDATE_SECONDS);
   const price = result?.meta?.regularMarketPrice;
-  const previousClose = result?.meta?.chartPreviousClose ?? result?.meta?.previousClose;
-  if (price == null || previousClose == null) return null;
+  if (price == null) return null;
 
   const regularMarketTime = result?.meta?.regularMarketTime;
   const timeZone = result?.meta?.exchangeTimezoneName ?? "UTC";
@@ -70,6 +73,31 @@ export async function fetchLiveQuote(symbol: string): Promise<LiveQuote | null> 
     regularMarketTime == null
       ? true
       : exchangeLocalDate(regularMarketTime, timeZone) === exchangeLocalDate(Date.now() / 1000, timeZone);
+
+  const timestamps: number[] = result?.timestamp ?? [];
+  const closes: (number | null)[] = result?.indicators?.adjclose?.[0]?.adjclose
+    ?? result?.indicators?.quote?.[0]?.close
+    ?? [];
+
+  let previousClose: number | null = null;
+  if (regularMarketTime != null && timestamps.length > 0) {
+    const priceBarDate = exchangeLocalDate(regularMarketTime, timeZone);
+    let priceBarIdx = -1;
+    for (let i = timestamps.length - 1; i >= 0; i--) {
+      if (exchangeLocalDate(timestamps[i], timeZone) === priceBarDate) {
+        priceBarIdx = i;
+        break;
+      }
+    }
+    for (let i = priceBarIdx - 1; i >= 0; i--) {
+      if (closes[i] != null) {
+        previousClose = closes[i];
+        break;
+      }
+    }
+  }
+  previousClose ??= result?.meta?.chartPreviousClose ?? result?.meta?.previousClose ?? null;
+  if (previousClose == null) return null;
 
   return { price, previousClose, hasTradedToday };
 }

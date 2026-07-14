@@ -54,6 +54,20 @@ feed by roughly 0.3-0.8% at any given moment — confirmed by cross-checking
 against a live DEGIRO portfolio pull. This is accepted as-is (see below for
 why fixing it via DEGIRO wasn't viable).
 
+**`previousClose` is derived from the dated daily bars, not Yahoo's
+`chartPreviousClose` meta field.** That field has been observed returning a
+close from several trading days back instead of the true prior session (e.g.
+reporting Monday's close as "previous" on a Friday) — this isn't rare or
+range-dependent tweaking, it happened in production and inflated
+`todayChangeEUR` by ~5x (€5,955 reported vs. €1,284 actually shown in DEGIRO)
+for one real trading day. `fetchLiveQuote` now finds the daily bar matching
+whatever day `regularMarketPrice`/`regularMarketTime` itself reflects, and
+uses the closing price of the bar immediately before it — since the bars are
+date-stamped, this is verifiable and doesn't depend on trusting a
+Yahoo-computed field. Don't revert to `meta.chartPreviousClose` as the
+primary source; it's only kept as a last-resort fallback when the bars array
+is unusable.
+
 ## `weekChangeEUR` / `weekChangePct` (`app/api/value/route.ts`)
 
 `weekAgoIdx = Math.max(0, lastIdx - 7)`; `weekChangeEUR = valueEUR -
