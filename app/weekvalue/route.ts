@@ -54,7 +54,9 @@ export async function GET(request: Request) {
     return new Response(svg, { headers: { "Content-Type": "image/svg+xml", "Cache-Control": "no-store" } });
   }
 
-  const startIdx = Math.max(0, n - days);
+  // n - 1 is "today"; go back `days` calendar days from there so a `days=7` window spans exactly 7 days
+  // of change (8 data points), matching /api/value's weekChangeEUR (lastIdx - 7) instead of one day short.
+  const startIdx = Math.max(0, n - 1 - days);
   const windowedDates = portfolio.dates.slice(startIdx);
   const windowedValues = portfolio.portfolioValue.slice(startIdx);
   const startValue = windowedValues[0];
