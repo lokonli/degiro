@@ -5,8 +5,6 @@ transaction/dividend history (CSV upload or the DEGIRO API), prices holdings
 against Yahoo Finance, and renders value, performance, and return-by-year
 charts.
 
-Live instance: https://redacted.example.com (private, Cloudflare Access gated).
-
 ## Features
 
 - Dashboard with current value, net invested, total return (with/without
