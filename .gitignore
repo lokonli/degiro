@@ -40,6 +40,8 @@ yarn-error.log*
 # live production data (personal financial data) — never publish this
 /data/transactions.json
 /data/degiro-transactions.csv
+/data/degiro-transactions.xlsx
+/data/dividends.json
 
 # vercel
 .vercel

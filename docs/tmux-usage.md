@@ -101,7 +101,7 @@ To load it globally for every tmux session you start on this machine, add
 to `~/.tmux.conf`:
 
 ```tmux
-source-file /home/redacted/dev/degiro/tmux/claude.tmux.conf
+source-file /path/to/degiro/tmux/claude.tmux.conf
 ```
 
 ## Common workflows
