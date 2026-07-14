@@ -350,6 +350,12 @@ export default function Dashboard({ series }: { series: PortfolioSeries }) {
         </div>
         <div className="flex items-center gap-3 pt-1">
           <Link
+            href="/docs"
+            className="flex h-8 items-center rounded-full border border-border px-3.5 text-xs font-medium text-ink-muted transition-colors hover:border-border-strong hover:text-ink"
+          >
+            Docs
+          </Link>
+          <Link
             href="/dividends"
             className="flex h-8 items-center rounded-full border border-border px-3.5 text-xs font-medium text-ink-muted transition-colors hover:border-border-strong hover:text-ink"
           >
