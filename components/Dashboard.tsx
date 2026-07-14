@@ -253,21 +253,36 @@ function YearlyReturnTooltip({
   );
 }
 
-function YearlyReturnLabel(props: { x?: number; y?: number; width?: number; height?: number; value?: number }) {
-  const { x = 0, y = 0, width = 0, height = 0, value = 0 } = props;
-  const isGain = value >= 0;
-  const labelY = isGain ? y - 6 : y + height + 14;
+function YearlyReturnLabel(props: {
+  x?: number;
+  y?: number;
+  width?: number;
+  height?: number;
+  value?: number; // gainEUR — LabelList's dataKey
+  index?: number;
+  returns: YearlyReturn[];
+}) {
+  const { x = 0, y = 0, width = 0, height = 0, value: gainEUR = 0, index = 0, returns } = props;
+  const isGain = gainEUR >= 0;
+  const returnPct = returns[index]?.returnPct ?? 0;
+  const color = isGain ? "var(--gain)" : "var(--loss)";
+  const centerX = x + width / 2;
+
+  // EUR line is always the one closer to the bar, % line further out — reads "EUR value, then (%) below it"
+  // whether the block sits above a gain bar or below a loss bar.
+  const eurY = isGain ? y - 18 : y + height + 14;
+  const pctY = isGain ? y - 6 : y + height + 26;
+
   return (
-    <text
-      x={x + width / 2}
-      y={labelY}
-      textAnchor="middle"
-      fontSize={11}
-      className="font-mono tabular"
-      fill={isGain ? "var(--gain)" : "var(--loss)"}
-    >
-      {pct(value, 1)}
-    </text>
+    <g className="font-mono tabular" fontSize={11} fill={color}>
+      <text x={centerX} y={eurY} textAnchor="middle">
+        {gainEUR >= 0 ? "+" : ""}
+        {eur.format(gainEUR)}
+      </text>
+      <text x={centerX} y={pctY} textAnchor="middle">
+        ({pct(returnPct, 1)})
+      </text>
+    </g>
   );
 }
 
@@ -516,7 +531,7 @@ export default function Dashboard({ series }: { series: PortfolioSeries }) {
         <h2 className="font-display text-lg italic text-ink">Return by year</h2>
         <div className="h-64 rounded-lg border border-border bg-bg-elevated pr-4 pt-4">
           <ResponsiveContainer width="100%" height="100%">
-            <BarChart data={yearlyReturns} margin={{ top: 24, right: 8, bottom: 8, left: 8 }}>
+            <BarChart data={yearlyReturns} margin={{ top: 36, right: 8, bottom: 20, left: 8 }}>
               <CartesianGrid vertical={false} stroke="var(--border)" strokeDasharray="3 4" />
               <XAxis
                 dataKey="label"
@@ -539,7 +554,10 @@ export default function Dashboard({ series }: { series: PortfolioSeries }) {
                 {yearlyReturns.map((d) => (
                   <Cell key={d.year} fill={d.gainEUR >= 0 ? "var(--gain)" : "var(--loss)"} />
                 ))}
-                <LabelList dataKey="returnPct" content={<YearlyReturnLabel />} />
+                <LabelList
+                  dataKey="gainEUR"
+                  content={(props: object) => <YearlyReturnLabel {...props} returns={yearlyReturns} />}
+                />
               </Bar>
             </BarChart>
           </ResponsiveContainer>
